@@ -39,3 +39,6 @@ next-env.d.ts
 .env*
 node_modules
 .next
+
+# Keep the example environment template in version control
+!.env.example

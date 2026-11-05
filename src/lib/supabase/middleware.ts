@@ -2,6 +2,20 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
+  const publicPaths = ["/", "/demo", "/login", "/signup", "/blog", "/contact", "/terms", "/privacy"];
+  const isPublic =
+    publicPaths.some((p) => request.nextUrl.pathname === p || request.nextUrl.pathname.startsWith(p + "/")) ||
+    request.nextUrl.pathname.startsWith("/api");
+
+  // Keep the public landing page and sample walkthrough available before credentials are configured.
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    if (isPublic) return NextResponse.next();
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  let supabaseResponse = NextResponse.next({ request });
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -28,12 +42,6 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-    // Redirect unauthenticated users to login (except for public pages and API)
-    const publicPaths = ["/", "/demo", "/login", "/signup", "/blog", "/contact", "/terms", "/privacy"];
-    const isPublic =
-      publicPaths.some((p) => request.nextUrl.pathname === p || request.nextUrl.pathname.startsWith(p + "/")) ||
-      request.nextUrl.pathname.startsWith("/api");
 
     if (!user && !isPublic) {
     const url = request.nextUrl.clone();

@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { ProblemSection } from "./ProblemSection";
 import { SolutionSection } from "./SolutionSection";
 import { PricingSection } from "./PricingSection";
-import { DemoModal } from "./DemoModal";
 
 function Navbar({ onStartBuilding }: { onStartBuilding: () => void }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -228,22 +228,22 @@ function Footer({ onStartBuilding }: { onStartBuilding: () => void }) {
 }
 
 export function LandingClient() {
-  const [demoOpen, setDemoOpen] = useState(false);
+  const router = useRouter();
+  const startDemo = () => router.push("/demo");
 
   return (
     <div className="min-h-screen bg-[#08080C] text-white antialiased">
-      <Navbar onStartBuilding={() => setDemoOpen(true)} />
-      <HeroSection onStartBuilding={() => setDemoOpen(true)} />
+      <Navbar onStartBuilding={startDemo} />
+      <HeroSection onStartBuilding={startDemo} />
       <div id="problem">
         <ProblemSection />
       </div>
       <SolutionSection />
       <div id="pricing">
-      <PricingSection onStartBuilding={() => setDemoOpen(true)} />
+      <PricingSection onStartBuilding={startDemo} />
     </div>
-    <CTASection onStartBuilding={() => setDemoOpen(true)} />
-    <Footer onStartBuilding={() => setDemoOpen(true)} />
-      <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
+    <CTASection onStartBuilding={startDemo} />
+    <Footer onStartBuilding={startDemo} />
     </div>
   );
 }

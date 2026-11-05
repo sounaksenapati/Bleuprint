@@ -21,35 +21,47 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const input = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  const input = body && typeof body === "object" && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : {};
   const { constraintPath, newValue } = input;
-  const allowedPaths = new Set([
-    "constraints.mechanical.dimensions_mm.x",
-    "constraints.mechanical.dimensions_mm.y",
-    "constraints.mechanical.dimensions_mm.z",
-    "constraints.mechanical.weight_target_g",
-    "constraints.mechanical.material",
-    "constraints.electrical.controller",
-    "constraints.electrical.battery_mah",
-    "constraints.electrical.battery_type",
-    "constraints.electrical.voltage",
-    "constraints.firmware.platform",
-    "constraints.cost.target_usd",
-  ]);
 
-  if (typeof constraintPath !== "string" || !allowedPaths.has(constraintPath)) {
+  const textLimits: Record<string, number> = {
+    "constraints.mechanical.material": 120,
+    "constraints.electrical.controller": 120,
+    "constraints.electrical.battery_type": 120,
+    "constraints.firmware.platform": 120,
+  };
+  const numericLimits: Record<string, { min: number; max: number }> = {
+    "constraints.mechanical.dimensions_mm.x": { min: 1, max: 10000 },
+    "constraints.mechanical.dimensions_mm.y": { min: 1, max: 10000 },
+    "constraints.mechanical.dimensions_mm.z": { min: 1, max: 10000 },
+    "constraints.mechanical.weight_target_g": { min: 1, max: 10000000 },
+    "constraints.electrical.battery_mah": { min: 1, max: 1000000 },
+    "constraints.electrical.voltage": { min: 0.1, max: 1000 },
+    "constraints.cost.target_usd": { min: 0, max: 10000000 },
+  };
+
+  if (typeof constraintPath !== "string") {
+    return NextResponse.json({ error: "A constraint path is required" }, { status: 400 });
+  }
+
+  const textLimit = textLimits[constraintPath];
+  const numericLimit = numericLimits[constraintPath];
+  if (!textLimit && !numericLimit) {
     return NextResponse.json({ error: "Unsupported constraint path" }, { status: 400 });
   }
-  if (
-    !(
-      typeof newValue === "string" &&
-      newValue.length <= 200 ||
-      typeof newValue === "number" &&
-      Number.isFinite(newValue) &&
-      newValue >= 0
-    )
-  ) {
-    return NextResponse.json({ error: "Invalid constraint value" }, { status: 400 });
+
+  if (textLimit && (typeof newValue !== "string" || !newValue.trim() || newValue.length > textLimit)) {
+    return NextResponse.json({ error: "Invalid text value for this constraint" }, { status: 400 });
+  }
+  if (numericLimit && (
+    typeof newValue !== "number" ||
+    !Number.isFinite(newValue) ||
+    newValue < numericLimit.min ||
+    newValue > numericLimit.max
+  )) {
+    return NextResponse.json({ error: "Numeric value is outside the permitted range" }, { status: 400 });
   }
 
   try {
@@ -70,6 +82,9 @@ export async function POST(
     const keys = constraintPath.split(".");
     let oldValue: any = currentPRD;
     for (const key of keys) oldValue = oldValue?.[key];
+    if (oldValue === undefined || typeof oldValue !== typeof newValue) {
+      return NextResponse.json({ error: "Constraint does not exist or has an incompatible value type" }, { status: 400 });
+    }
 
     const result = propagateConstraintChange(currentPRD, {
       path: constraintPath,

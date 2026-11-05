@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   ArrowLeft, ArrowRight, Box, Check, ChevronRight, CircuitBoard,
-  Code2, Cpu, FileText, Layers3, LockKeyhole, Play, RotateCcw,
+  Code2, Cpu, FileText, Layers3, RotateCcw,
   Sparkles, Wrench,
 } from "lucide-react";
 

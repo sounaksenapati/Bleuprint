@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getOwnedProject } from "@/lib/supabase/authorize-project";
 import { callGemini, extractJSON } from "@/lib/ai/gemini";
 import { CHAT_SYSTEM_PROMPT } from "@/lib/ai/prompts";
 
@@ -8,27 +8,45 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createServerSupabaseClient();
-  const { message } = await request.json();
+  const { supabase, user, project } = await getOwnedProject(id);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const message =
+    body && typeof body === "object" && "message" in body
+      ? (body as { message?: unknown }).message
+      : undefined;
+
+  if (typeof message !== "string" || !message.trim() || message.length > 8000) {
+    return NextResponse.json(
+      { error: "Message must be between 1 and 8000 characters" },
+      { status: 400 }
+    );
+  }
 
   try {
-    // Save user message
-    await supabase.from("chat_messages").insert({
+    const { error: saveUserError } = await supabase.from("chat_messages").insert({
       project_id: id,
       role: "user",
-      content: message,
+      content: message.trim(),
     });
+    if (saveUserError) throw new Error("Unable to save message");
 
-    // Get current constraint context
     const { data: constraint } = await supabase
       .from("constraints")
       .select("constraint_data")
       .eq("project_id", id)
       .order("version", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    // Get recent chat history
     const { data: history } = await supabase
       .from("chat_messages")
       .select("role, content")
@@ -45,18 +63,17 @@ ${(history || [])
   .map((m) => `${m.role}: ${m.content}`)
   .join("\n")}
 
-User says: ${message}`;
+User says: ${message.trim()}`;
 
     const response = await callGemini(contextPrompt, CHAT_SYSTEM_PROMPT);
 
-    // Save assistant response
-    await supabase.from("chat_messages").insert({
+    const { error: saveAssistantError } = await supabase.from("chat_messages").insert({
       project_id: id,
       role: "assistant",
       content: response,
     });
+    if (saveAssistantError) throw new Error("Unable to save assistant response");
 
-    // Try to extract constraint updates if present
     let updates = null;
     try {
       if (response.includes('"updates"')) {
@@ -64,14 +81,14 @@ User says: ${message}`;
         updates = jsonPart.updates;
       }
     } catch {
-      // No updates in response
+      // A response without structured updates is still a valid chat response.
     }
 
     return NextResponse.json({ response, updates });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Chat error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to process message" },
+      { error: error instanceof Error ? error.message : "Failed to process message" },
       { status: 500 }
     );
   }

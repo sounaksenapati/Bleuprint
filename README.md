@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bleuprint
 
-## Getting Started
+**An AI-assisted workspace for exploring hardware products — from an initial idea to an engineering starting point.**
 
-First, run the development server:
+Bleuprint is an experimental product workspace for turning a plain-language hardware concept into a structured product brief, a set of engineering constraints, and first-pass design artifacts.
+
+## What the prototype explores
+
+1. Describe a hardware product idea.
+2. Generate a structured product requirements document (PRD).
+3. Review mechanical, electrical, firmware, and cost constraints.
+4. Generate draft OpenSCAD, C++ firmware, and a bill of materials (BOM).
+5. Iterate through a project workspace and AI chat.
+
+> **Engineering disclaimer:** AI-generated specifications, CAD, firmware, component selections, and cost estimates are unverified drafts. They must be reviewed, simulated, compiled, and tested by qualified engineers before being used to manufacture or operate hardware. Bleuprint does not provide certification or safety approval.
+
+## Current status
+
+- [x] Next.js application and workspace UI
+- [x] Supabase authentication integration
+- [x] Project creation and listing
+- [x] Gemini-backed PRD, CAD, firmware, and BOM generation
+- [x] Constraint versioning and artifact persistence
+- [x] Project ownership checks added to project-scoped API routes
+- [ ] Verify database schema and Row Level Security against a fresh Supabase project
+- [ ] Add automated authorization and generation tests
+- [ ] Validate AI outputs against strict schemas
+- [ ] Compile/simulate generated CAD and firmware
+- [ ] Deploy staging and complete end-to-end testing
+
+See [the roadmap](docs/ROADMAP.md) and [security notes](docs/SECURITY.md).
+
+## Tech stack
+
+- Next.js 15, React 19, TypeScript
+- Tailwind CSS 4, Radix UI
+- Supabase Auth and Postgres
+- Google Gemini API
+- Zustand
+- Three.js / React Three Fiber, Recharts
+
+## Run locally
+
+### Prerequisites
+
+- Node.js 20+
+- npm
+- A Supabase project
+- A Google AI Studio API key with access to the configured Gemini model
+
+### Install
+
+```bash
+npm install
+cp .env.example .env.local
+```
+
+Fill in the Supabase URL, Supabase anon/publishable key, and Gemini API key in `.env.local`. Keep all real secrets out of Git.
+
+### Database
+
+The initial schema and Row Level Security policies for a **new** Supabase project are in `supabase/migrations/0001_initial_schema.sql`. Review the migration before applying it. Do not run it blindly against an existing database; first compare it with the current schema and migration history.
+
+Enable email/password authentication in Supabase.
+
+### Start
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+```
 
-## Learn More
+## Repository map
 
-To learn more about Next.js, take a look at the following resources:
+- `src/app` — pages, layouts, and API routes
+- `src/components` — landing page, dashboard, and workspace UI
+- `src/lib/ai` — Gemini client, prompts, and artifact generators
+- `src/lib/constraint-engine` — constraint propagation
+- `src/lib/supabase` — Supabase clients and project authorization
+- `src/store` — workspace state
+- `supabase/migrations` — database schema and RLS policies
+- `docs` — roadmap and security notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Product principles
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Engineer in the loop:** generated artifacts are drafts, not validated designs.
+- **Traceability:** preserve the inputs and constraint versions behind every artifact.
+- **Visible uncertainty:** distinguish assumptions, AI suggestions, sourced component data, and verified results.
+- **Secure by default:** enforce authentication and ownership at both API and database layers.
+- **Useful before broad:** prioritise a reliable end-to-end workflow over disconnected features.
 
-## Deploy on Vercel
+## Contributing
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Issues and thoughtful feedback are welcome. Describe the problem, proposed change, and how it was tested. Do not include credentials, personal data, or confidential engineering files in issues or commits.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+No open-source licence has been selected yet. Until a licence is added, the repository remains subject to default copyright rules; do not assume its contents are available for reuse.

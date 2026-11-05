@@ -28,7 +28,7 @@ Bleuprint is an experimental product workspace for turning a plain-language hard
 - [ ] Compile/simulate generated CAD and firmware
 - [ ] Deploy staging and complete end-to-end testing
 
-See [the roadmap](docs/ROADMAP.md) and [security notes](docs/SECURITY.md).
+Try the [interactive five-step demo](/demo). See [the roadmap](docs/ROADMAP.md), [security notes](docs/SECURITY.md), and [Supabase setup](docs/SUPABASE_SETUP.md).
 
 ## Tech stack
 

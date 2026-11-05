@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getOwnedProject } from "@/lib/supabase/authorize-project";
 import { propagateConstraintChange } from "@/lib/constraint-engine/propagate";
 import { generateCAD } from "@/lib/ai/generators/cad";
 import { generateFirmware } from "@/lib/ai/generators/firmware";
@@ -10,62 +10,89 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createServerSupabaseClient();
-  const { constraintPath, newValue } = await request.json();
+  const { supabase, user, project } = await getOwnedProject(id);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const input = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  const { constraintPath, newValue } = input;
+  const allowedPaths = new Set([
+    "constraints.mechanical.dimensions_mm.x",
+    "constraints.mechanical.dimensions_mm.y",
+    "constraints.mechanical.dimensions_mm.z",
+    "constraints.mechanical.weight_target_g",
+    "constraints.mechanical.material",
+    "constraints.electrical.controller",
+    "constraints.electrical.battery_mah",
+    "constraints.electrical.battery_type",
+    "constraints.electrical.voltage",
+    "constraints.firmware.platform",
+    "constraints.cost.target_usd",
+  ]);
+
+  if (typeof constraintPath !== "string" || !allowedPaths.has(constraintPath)) {
+    return NextResponse.json({ error: "Unsupported constraint path" }, { status: 400 });
+  }
+  if (
+    !(
+      typeof newValue === "string" &&
+      newValue.length <= 200 ||
+      typeof newValue === "number" &&
+      Number.isFinite(newValue) &&
+      newValue >= 0
+    )
+  ) {
+    return NextResponse.json({ error: "Invalid constraint value" }, { status: 400 });
+  }
 
   try {
-    // 1. Fetch current constraints
-    const { data: currentConstraint } = await supabase
+    const { data: currentConstraint, error: constraintReadError } = await supabase
       .from("constraints")
       .select("*")
       .eq("project_id", id)
       .order("version", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
+    if (constraintReadError) throw new Error("Unable to load current constraints");
     if (!currentConstraint) {
       return NextResponse.json({ error: "No constraints found" }, { status: 404 });
     }
 
     const currentPRD = currentConstraint.constraint_data;
-
-    // 2. Get old value
     const keys = constraintPath.split(".");
     let oldValue: any = currentPRD;
     for (const key of keys) oldValue = oldValue?.[key];
 
-    // 3. Propagate
     const result = propagateConstraintChange(currentPRD, {
       path: constraintPath,
       oldValue,
       newValue,
     });
 
-    // 4. Save new version
     const newVersion = currentConstraint.version + 1;
-    await supabase.from("constraints").insert({
+    const { error: versionError } = await supabase.from("constraints").insert({
       project_id: id,
       constraint_data: result.updatedConstraints,
       version: newVersion,
     });
+    if (versionError) throw new Error("Unable to save updated constraints");
 
-    // 5. Regenerate affected artifacts
     const regenerated: Record<string, string> = {};
-
     const promises: Promise<void>[] = [];
+
     if (result.affectedArtifacts.includes("cad")) {
-      promises.push(
-        generateCAD(result.updatedConstraints).then((code) => {
-          regenerated.cad = code;
-        })
-      );
+      promises.push(generateCAD(result.updatedConstraints).then((code) => { regenerated.cad = code; }));
     }
     if (result.affectedArtifacts.includes("firmware")) {
-      promises.push(
-        generateFirmware(result.updatedConstraints).then((code) => {
-          regenerated.firmware = code;
-        })
-      );
+      promises.push(generateFirmware(result.updatedConstraints).then((code) => { regenerated.firmware = code; }));
     }
     if (result.affectedArtifacts.includes("bom")) {
       regenerated.bom = generateBOM(result.updatedConstraints);
@@ -73,31 +100,34 @@ export async function POST(
 
     await Promise.all(promises);
 
-    // 6. Save artifacts
     const inserts = Object.entries(regenerated).map(([type, content]) => ({
       project_id: id,
       constraint_version: newVersion,
       artifact_type: type,
       content,
     }));
-    if (inserts.length > 0) await supabase.from("artifacts").insert(inserts);
+    if (inserts.length > 0) {
+      const { error: artifactError } = await supabase.from("artifacts").insert(inserts);
+      if (artifactError) throw new Error("Unable to save regenerated artifacts");
+    }
 
-    // Update project timestamp
     await supabase
       .from("projects")
       .update({ updated_at: new Date().toISOString() })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", user.id);
 
     return NextResponse.json({
       success: true,
       updatedConstraints: result.updatedConstraints,
       regeneratedArtifacts: regenerated,
       affectedArtifacts: result.affectedArtifacts,
+      version: newVersion,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Constraint update error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to update constraint" },
+      { error: error instanceof Error ? error.message : "Failed to update constraint" },
       { status: 500 }
     );
   }
